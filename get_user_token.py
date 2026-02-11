@@ -14,6 +14,7 @@ import secrets
 import threading
 import urllib.parse
 import webbrowser
+import os
 
 import requests
 
@@ -26,7 +27,7 @@ LOCAL_PORT = 9000
 # 飞书 API 地址
 AUTHORIZE_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
 TOKEN_URL = "https://open.feishu.cn/open-apis/authen/v2/oauth/token"
-
+REFRESH_TOKEN_URL = "https://open.feishu.cn/open-apis/authen/v2/oauth/token"
 
 def build_authorize_url(state: str) -> str:
     """构建飞书授权链接"""
@@ -35,7 +36,7 @@ def build_authorize_url(state: str) -> str:
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
         "state": state,
-        "scope": "auth:user.id:read,docx:document,docx:document:write,docx:document:create,im:message:send_as_bot",
+        "scope": "auth:user.id:read",
     }
     return f"{AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
 
@@ -51,6 +52,23 @@ def exchange_code_for_token(code: str) -> dict:
     }
     resp = requests.post(
         TOKEN_URL,
+        json=payload,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def refresh_access_token(refresh_token: str) -> dict:
+    """使用刷新令牌获取新的 user_access_token"""
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "refresh_token": refresh_token,
+    }
+    resp = requests.post(
+        REFRESH_TOKEN_URL,
         json=payload,
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
@@ -144,5 +162,49 @@ def main():
     print("\ntoken 已保存到 token.json")
 
 
+def refresh_token_main():
+    """刷新令牌的主函数"""
+    try:
+        # 读取现有的token.json文件
+        with open("token.json", "r", encoding="utf-8") as f:
+            token_data = json.load(f)
+        
+        refresh_token = token_data.get("refresh_token")
+        if not refresh_token:
+            print("错误：token.json中没有找到refresh_token")
+            return
+        
+        print("正在刷新 user_access_token...")
+        result = refresh_access_token(refresh_token)
+        
+        if result.get("code") != 0:
+            print(f"[错误] 刷新 token 失败: {json.dumps(result, ensure_ascii=False, indent=2)}")
+            return
+        
+        data = result.get("data", result)
+        print("刷新 user_access_token 成功！")
+        print("-" * 60)
+        print(f"  access_token:  {data.get('access_token', 'N/A')}")
+        print(f"  token_type:    {data.get('token_type', 'N/A')}")
+        print(f"  expires_in:    {data.get('expires_in', 'N/A')} 秒")
+        print(f"  refresh_token: {data.get('refresh_token', 'N/A')}")
+        print(f"  scope:         {data.get('scope', 'N/A')}")
+        print("-" * 60)
+        
+        # 更新token.json文件
+        with open("token.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print("\ntoken.json 已更新")
+        
+    except FileNotFoundError:
+        print("错误：未找到 token.json 文件，请先运行获取令牌流程")
+    except Exception as e:
+        print(f"刷新令牌时发生错误: {e}")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "refresh":
+        refresh_token_main()
+    else:
+        main()
