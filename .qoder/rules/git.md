@@ -1,6 +1,6 @@
 ---
-trigger: model_decision
-description: 使用github mcp生效
+trigger: always_on
+alwaysApply: true
 ---
 ## GitHub 工具使用规则
 
