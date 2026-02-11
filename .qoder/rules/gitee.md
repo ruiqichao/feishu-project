@@ -1,6 +1,6 @@
 ---
-trigger: model_decision
-description: 使用gitee mcp提交生效
+trigger: manual
+alwaysApply: false
 ---
 ## Gitee 工具使用规则
 
